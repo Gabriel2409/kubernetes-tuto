@@ -1,6 +1,8 @@
 # Installation
 
-- Install kubectl = kubernetes cli
+## kubectl
+
+- kubectl is kubernetes cli
 
 ```bash
 VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
@@ -8,6 +10,44 @@ curl -LO https://storage.googleapis.com/kubernetes-release/release/$VERSION/bin/
 chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
 ```
+
+## Krew
+
+Krew is kubectl plugin manager: https://github.com/kubernetes-sigs/krew/
+Installation instructions: https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+
+```bash
+(
+  set -x; cd "$(mktemp -d)" &&
+  OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
+  ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+  KREW="krew-${OS}_${ARCH}" &&
+  curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" &&
+  tar zxvf "${KREW}.tar.gz" &&
+  ./"${KREW}" install krew
+)
+```
+
+Then in .bashrc:
+
+```
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+```
+
+## kubectx and kubens
+
+kubectx is a tool to switch between contexts (clusters) on kubectl faster.
+kubens is a tool to switch between Kubernetes namespaces (and configure them for kubectl) easily.
+https://github.com/ahmetb/kubectx
+
+To install them with Krew:
+
+```
+kubectl krew install ctx
+kubectl krew install ns
+```
+
+## multipass
 
 - Install multipass: https://multipass.run/ : allows to easily launch a VM with either hyperV or virtual box
   To use it on WSL, it must be installed on windows, not on linux. And then, we can create
@@ -31,6 +71,52 @@ sudo mv ./kubectl /usr/local/bin/kubectl
 - mount a folder: `multipass mount ./testfolder node1:/usr/share/test`.
   Note that if you want to use an absolute path: `multipass mount $(wslpath -w /mnt/d/projects/kubernetes-tuto/test2/) node1:/usr/share/test`
 - unmount a folder: `multipass umount node1:/usr/share/test` or unmount all : `multipass umount node1`
+
+# Create a clusters
+
+Summarizes multiple ways to create local clusters
+
+## Minikube
+
+- Install minikube:
+
+```bash
+curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+chmod +x minikube
+sudo mv minikube /usr/local/bin/
+```
+
+- to start minikube: `minikube start` (docker desktop needs to be running for this to work on wsl)
+- to start minikube with 3 nodes while specifying docker driver: `minikube start --driver docker --nodes 3`
+- see nodes: `kubectl get no`
+- destroy cluster: `minikube delete`
+
+## Kind
+
+Kind (Kubernetes in docker) allows to deploy a kubernetes cluster such that each node runs in a docker container
+
+- Install with go: `go install sigs.k8s.io/kind@v0.14.0` (replace v0.14.0 with stable version)
+- Create a cluster: `kind create cluster --name k8s`
+- We can see a container was created when running `docker container ls`: this container runs kubernetes
+- Note that kind automatically creates a context and sets it as current context: `kubectl config get-contexts`
+- We can list the nodes of the cluster: `kubectl get nodes`
+
+To create clusters with several nodes, we need a yaml config file:
+
+```yaml
+#config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+```
+
+We create the cluster with: `kind create cluster --name k8s-2 --config config.yaml`
+
+- Get the clusters with `kind get clusters`
+- Cleanup: `kind delete cluster --name k8s`
 
 # Summary of useful concepts
 
