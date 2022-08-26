@@ -104,7 +104,7 @@ Kind (Kubernetes in docker) allows to deploy a kubernetes cluster such that each
 To create clusters with several nodes, we need a yaml config file:
 
 ```yaml
-#config.yaml
+# kindconfig.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -113,10 +113,73 @@ nodes:
   - role: worker
 ```
 
-We create the cluster with: `kind create cluster --name k8s-2 --config config.yaml`
+We create the cluster with: `kind create cluster --name k8s-2 --config kindconfig.yaml`
 
 - Get the clusters with `kind get clusters`
 - Cleanup: `kind delete cluster --name k8s`
+
+## MicroK8s
+
+Easy to use solution very good for local dev. Can also be configured with several nodes and used in prod
+
+Note: In this example, install is done on VM:
+
+- create VM: `multipass launch --name microk8s --mem 4G`
+- install microk8s on VM: `multipass exec microk8s -- sudo snap install microk8s --classic`
+- get config in yaml on local machine: `multipass exec microk8s -- sudo microk8s.config > microk8s.yaml`
+- set KUBECONFIG var: `export KUBECONFIG=$PWD/microk8s.yaml`
+- see nodes: `kubectl get no` (notes: i have problems when listing the nodes, wsl issue)
+- run `microk8s status` inside the vm to see all enabled and disabled addons
+- before using cluster and deploying app, we can install CodeDNS via dns addon: `microk8s enable dns`
+
+# K3s
+
+Very light kubernetes distribution. Same as above, installed on a VM
+
+- lauch: `multipass launch --name k3s-1`
+- get ip: `IP=$(multipass info microk8s | grep IP | awk '{print $2}')`
+- install : `multipass exec k3s-1 -- bash -c "curl -sfL https://get.k3s.io | sh -"`
+- create temp cfg in local machine : `multipass exec k3s-1 sudo cat /etc/rancher/k3s/k3s.yaml > k3s.cfg.tmp`
+- replace IP in config file: `cat k3s.cfg.tmp | sed "s/127.0.0.1/$IP/" > k3s.cfg`
+- set kubeconfig var: `export KUBECONFIG=$PWD/k3s.cfg`
+- get nodes: `kubectl get nodes` (notes: i have problems when listing the nodes, wsl issue)
+
+- create other vms:
+
+```bash
+for node in k3s-2 k3s-3;do
+  multipass launch -n $node
+done
+```
+
+- retrieve token from master node: `TOKEN=$(multipass exec k3s-1 sudo cat /var/lib/rancher/k3s/server/node-token)`
+- Join the nodes:
+
+```bash
+# Join node2
+
+$ multipass exec k3s-2 -- \
+bash -c "curl -sfL https://get.k3s.io | K3S_URL=\"https://$IP:6443\" K3S_TOKEN=\"$TOKEN\" sh -"
+
+# Join node3
+$ multipass exec k3s-3 -- \
+bash -c "curl -sfL https://get.k3s.io | K3S_URL=\"https://$IP:6443\" K3S_TOKEN=\"$TOKEN\" sh -"
+
+```
+
+# K3d
+
+Can deploy K3s clusters such that each node runs in a docker container. Installed directly
+on local maching. Docker desktop must be running on WSL
+
+- install: `curl -s https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash`
+- check version: `k3d version`
+- creates a cluster named k3s with 2 workers and 1 server: `k3d cluster create k3s --agents 2`
+- more infos: `k3d cluster create --help`
+- list containers: `docker ps`: we should see servers and workers
+- swith context: `kubectl config use-context k3d-k3s`
+- list nodes: `kubectl get nodes`
+- delete cluster: `k3d cluster delete k3s`
 
 # Summary of useful concepts
 
