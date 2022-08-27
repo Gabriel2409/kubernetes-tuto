@@ -49,9 +49,19 @@ kubectl krew install ns
 
 ## multipass
 
+IMPORTANT NOTE FOR WSL. When creating multipass machines and installing kubernetes on them,
+kubectl is not able to access them because of network rules.
+To solve this issue,
+
+- we can launch this from powershell as admin: `Get-NetIPInterface | where {$_.InterfaceAlias -eq 'vEthernet (WSL)' -or $_.InterfaceAlias -eq 'vEthernet (Default Switch)'} | Set-NetIPInterface -Forwarding Enabled` (see https://stackoverflow.com/questions/65716797/cant-ping-ubuntu-vm-from-wsl2-ubuntu).
+- we can also do some port forwarding: see https://pypi.org/project/WSL-Port-Forwarding/
+
+NOTE: I am still unclear if we need both of them or just the first
+
 - Install multipass: https://multipass.run/ : allows to easily launch a VM with either hyperV or virtual box
   To use it on WSL, it must be installed on windows, not on linux. And then, we can create
   an alias to use it directly on WSL: for ex: `alias multipass="/mnt/c/'Program Files'/Multipass/bin/multipass.exe"`
+- set driver to hyper V: `multipass set local.driver=hyperv` or virtualbox: `multipass set local.driver=virtualbox`
 
 - IMPORTANT: to use the mount features in WSL, you must be in a folder accessible by windows, such as `/mnt/c/...`
 - enable mounting with `multipass set local.privileged-mounts=true`
@@ -72,7 +82,7 @@ kubectl krew install ns
   Note that if you want to use an absolute path: `multipass mount $(wslpath -w /mnt/d/projects/kubernetes-tuto/test2/) node1:/usr/share/test`
 - unmount a folder: `multipass umount node1:/usr/share/test` or unmount all : `multipass umount node1`
 
-# Create a clusters
+# Create local clusters
 
 Summarizes multiple ways to create local clusters
 
@@ -128,7 +138,7 @@ Note: In this example, install is done on VM:
 - install microk8s on VM: `multipass exec microk8s -- sudo snap install microk8s --classic`
 - get config in yaml on local machine: `multipass exec microk8s -- sudo microk8s.config > microk8s.yaml`
 - set KUBECONFIG var: `export KUBECONFIG=$PWD/microk8s.yaml`
-- see nodes: `kubectl get no` (notes: i have problems when listing the nodes, wsl issue)
+- see nodes: `kubectl get no` (notes: see multipass notes on wsl)
 - run `microk8s status` inside the vm to see all enabled and disabled addons
 - before using cluster and deploying app, we can install CodeDNS via dns addon: `microk8s enable dns`
 
@@ -137,12 +147,12 @@ Note: In this example, install is done on VM:
 Very light kubernetes distribution. Same as above, installed on a VM
 
 - lauch: `multipass launch --name k3s-1`
-- get ip: `IP=$(multipass info microk8s | grep IP | awk '{print $2}')`
+- get ip: `IP=$(multipass info k3s-1 | grep IP | awk '{print $2}')` (not that IP will change if you restart host machine)
 - install : `multipass exec k3s-1 -- bash -c "curl -sfL https://get.k3s.io | sh -"`
 - create temp cfg in local machine : `multipass exec k3s-1 sudo cat /etc/rancher/k3s/k3s.yaml > k3s.cfg.tmp`
 - replace IP in config file: `cat k3s.cfg.tmp | sed "s/127.0.0.1/$IP/" > k3s.cfg`
 - set kubeconfig var: `export KUBECONFIG=$PWD/k3s.cfg`
-- get nodes: `kubectl get nodes` (notes: i have problems when listing the nodes, wsl issue)
+- get nodes: `kubectl get nodes` (notes: see multipass notes on wsl)
 
 - create other vms:
 
@@ -180,6 +190,41 @@ on local maching. Docker desktop must be running on WSL
 - swith context: `kubectl config use-context k3d-k3s`
 - list nodes: `kubectl get nodes`
 - delete cluster: `k3d cluster delete k3s`
+
+# Production clusters
+
+## managed solutions
+
+Lots of cloud providers propose solutions to manage clusters for a prod environment:
+
+- GKE: google kubernetes engine
+- AKS: Azure Container service
+- EKS: Amazon Elastic Container service
+- DigitalOcean
+- OVH
+
+Using them is straightforward. Creation can be done using the web interface, then we
+download the config file and modify KUBECONFIG var to point to the config. Then, we
+can see the nodes with `kubectl get nodes`
+
+## install kubernetes without providers
+
+lots of solutions:
+
+- kubeadm:
+  - https://kubernetes.io/fr/docs/setup/production-environment/tools/kubeadm/
+  - nodes must be provisionned prior to setting up cluster
+- kops:
+  - https://github.com/kubernetes/kops
+  - deals with full cluster lifecycle
+- kubespray:
+  - https://github.com/kubernetes-sigs/kubespray
+  - uses ansible to set up kubernetes
+- rancher:
+  - https://rancher.com/
+  - allows to handle app lifecycle with a catalog
+- Docker EE (deploy Swarm and Kubernetes)
+- terraform + ansible (provisionning + config)
 
 # Summary of useful concepts
 
