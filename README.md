@@ -226,6 +226,45 @@ lots of solutions:
 - Docker EE (deploy Swarm and Kubernetes)
 - terraform + ansible (provisionning + config)
 
+TODO: add instructions to set up cluster with kubeadm
+
+# Pods
+
+## Introduction
+
+- Smallest applicative unit in kubernetes
+- Group of countainer in same isolation context
+- Share network stack and volumes
+- Dedicated ip address, no NAT (network address translation) for communication between pods
+
+- An app consists of several specification of pods.
+- Each specification corresponds to a microservice
+- Horizontal scaling with nb of replica of a pod
+
+## Lifecycle
+
+```
+# example pod specification
+# www.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: www
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.12.2
+```
+
+- launch a pod: `kubectl create -f <pod-specification.yaml>`
+- list pods: `kubectl get pods`
+- describe a pod: `kubectl describe pod <pod_name>`
+- logs of a pod: `kubectl logs <pod-name> [-c <container-name>]` (no need to specify container-name if pod has only one container)
+- launch a command in a pod: `kubectl exec <pod-name> [-c <container-name>] -- <command>`
+  - ex: interactive shell: `kubectl exec -it <pod-name> -- /bin/bash`
+- forward port of www pod to host machine: `kubectl port-forward www 8080:80`
+- delete a pod: `kubectl delete pod <pod-name>`
+
 # Summary of useful concepts
 
 - Container:
