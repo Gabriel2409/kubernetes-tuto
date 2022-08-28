@@ -241,9 +241,12 @@ TODO: add instructions to set up cluster with kubeadm
 - Each specification corresponds to a microservice
 - Horizontal scaling with nb of replica of a pod
 
+- Pods can be created manually but are usually created in a ReplicaSet inside a Deployment
+- They are exposed in the cluster or to the outside via a Service
+
 ## Lifecycle
 
-```
+```yaml
 # example pod specification
 # www.yaml
 apiVersion: v1
@@ -256,7 +259,8 @@ spec:
       image: nginx:1.12.2
 ```
 
-- launch a pod: `kubectl create -f <pod-specification.yaml>`
+- launch a pod from a file: `kubectl create -f <pod-specification.yaml>`
+- launch a pod directly from an image: `kubect run <pod-name> --image=<image-name>`
 - list pods: `kubectl get pods`
 - describe a pod: `kubectl describe pod <pod_name>`
 - logs of a pod: `kubectl logs <pod-name> [-c <container-name>]` (no need to specify container-name if pod has only one container)
@@ -264,6 +268,166 @@ spec:
   - ex: interactive shell: `kubectl exec -it <pod-name> -- /bin/bash`
 - forward port of www pod to host machine: `kubectl port-forward www 8080:80`
 - delete a pod: `kubectl delete pod <pod-name>`
+
+Note: generate a pod specification: `kubectl run db --image mongo:4.0 --dry-run=client -o yaml`
+--dry-run simulates the resource creation with 2 possible options:
+
+- client: resource not sent to server API
+- server: resource set but not persisted to server API
+
+## Scheduling
+
+- selection of the node where a pod is deployed
+- done by kube-scheduler component
+
+Example:
+
+```
+kubect run www --image=nginx:1.16-alpine --restart=Never
+kubectl describe pod www
+# the output shows that the default scheduler assigned default/www to a node
+```
+
+Here the scheduler was able to select a node in our cluster. It is also possible to
+add constraints to help the scheduler select a node
+
+### nodeSelector: schedule a pod on a node with a specific label
+
+```bash
+# add label on a node
+kubectl label nodes <node-name> disktype=ssd
+# see node as yaml
+kubectl get node/<node-name> -o yaml
+# shows the labels in the outputs
+```
+
+- then in the file specification:
+
+```yaml
+
+..
+kind: Pod
+spec:
+  containers:
+    - ...
+  nodeSelector:
+    disktype: ssd
+```
+
+Now when creating the pod, the scheduler will only use nodes that have the correct label.
+If no node correspond, it will fail
+
+### nodeAffinity
+
+- allows to schedule pods on certain nodes only
+- applied on node labels
+- more granular than nodeSelector
+- List of Operators: `In`, `NotIn`, `Exists`, `DoesNotExit`, `Gt`, `Lt`
+- different rules:
+  - hard constraint, not deployed on failure: `requiredDuringSchedulingIgnoredDuringExecution`
+  - soft constraint, lets selector decide which pod to use on failure: `preferredDuringSchedulingIgnoredDuringExecution`
+
+File specification example:
+
+```yaml
+..
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/e2e-az-name
+                operator: In
+                values:
+                  - e2e-az1
+                  - e2e-az2
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - preferencee:
+          matchExpressions:
+            - key: disktype
+              operator: In
+              values:
+                - ssd
+```
+
+### podAffinity / podAntiAffinity
+
+- allows to schedule pods based on labels of other pods
+- different rules: `requiredDuringSchedulingIgnoredDuringExecution` and `preferredDuringSchedulingIgnoredDuringExecution` (same as nodeAffinity)
+- key `topologyKey` can be used to specify hostname, region, az, ... and specifies where the constraint must be applied
+
+File specification example:
+
+```yaml
+..
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+         matchExpressions:
+            - key: security
+              operator: In
+              values:
+                - S1
+        topologyKey: failure-domain.beta.kubernetes.io/zone
+    podAntiAffinity
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: security
+                  operator: In
+                  values:
+                    - S2
+            topologyKey: kubernetes.io/hostname
+```
+
+### resource allocation
+
+in the pod specification
+
+```yaml
+..
+spec:
+  containers:
+    - name: ..
+      ..
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "250m"
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+```
+
+### taints and toleration
+
+A taint is added on a node and is repulsive. For a pod to be scheduled on this node,
+it must tolerate this taint
+
+```
+# example: on a master node, there is a taint to prevent scheduling
+$ kubectl get no master -o yaml
+...
+spec:
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+```
+
+Now if I want to deploy a pod on this node, in the pod specification file, i put the
+same key and same effect as the taint.
+
+```yaml
+..
+spec:
+  tolerations:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+```
 
 # Summary of useful concepts
 
