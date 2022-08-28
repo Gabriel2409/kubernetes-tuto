@@ -259,7 +259,7 @@ spec:
       image: nginx:1.12.2
 ```
 
-- launch a pod from a file: `kubectl create -f <pod-specification.yaml>`
+- launch a pod from a file: `kubectl apply -f <pod-specification.yaml>`
 - launch a pod directly from an image: `kubect run <pod-name> --image=<image-name>`
 - list pods: `kubectl get pods`
 - describe a pod: `kubectl describe pod <pod_name>`
@@ -428,6 +428,61 @@ spec:
     - effect: NoSchedule
       key: node-role.kubernetes.io/master
 ```
+
+# Services
+
+- expose pods via network rules
+- use labels to group pods
+- persistant IP address (virtual IP address)
+- kube-proxy in charge of laod balancing on pods
+- different types:
+  - ClusterIP: exposition inside cluster
+  - NodePort: exposition to outside
+  - LoadBalancer: integration with cloud provider
+  - ExternalName: associates service to DNS name
+
+## ClusterIP
+
+allows to have interaction inside the cluster
+
+```yaml
+# pod.yaml - pod specification file
+apiVersion: v1
+kind: Pod
+metadata:
+  name: www
+  labels:
+    app: www
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.20-alpine
+```
+
+```yaml
+# service.yaml - specification of the www service
+apiVersion: v1
+kind: Service
+metadata:
+  name: www
+spec:
+  selector:
+    app: www
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+```
+
+- creation of the pod: `kubectl apply -f pod.yaml`
+- creation of the service: `kubectl apply -f service.yaml`
+- see pods and service: `kubectl get po,svc`
+- launch interactive shell and curl to port 80: `kubectl run -it --image:alpine` and in shell: `wget -O- http://www`
+
+If we want to TEMPORARILY expose a port to host machine (outside the cluster):
+
+- `kubectl port-forward svc/www 8080:80` then go to localhost: 8080
+- OR `kubectl proxy`: then go to localhost:8001/api/v1/namespaces/default/services/www:80/proxy
 
 # Summary of useful concepts
 
