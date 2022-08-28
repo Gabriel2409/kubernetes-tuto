@@ -470,8 +470,8 @@ spec:
     app: www
   type: ClusterIP
   ports:
-    - port: 80
-      targetPort: 80
+    - port: 80 # service exposes port 80 in the cluster
+      targetPort: 80 # requests forwarded to port 80 of pods
 ```
 
 - creation of the pod: `kubectl apply -f pod.yaml`
@@ -483,6 +483,31 @@ If we want to TEMPORARILY expose a port to host machine (outside the cluster):
 
 - `kubectl port-forward svc/www 8080:80` then go to localhost: 8080
 - OR `kubectl proxy`: then go to localhost:8001/api/v1/namespaces/default/services/www:80/proxy
+
+## NodePort
+
+Contrary to ClusterIP, exposes ports outside of cluster. Note that it also exposes inside the cluster
+In fact, it can do what a ClusterIP can but can also open a port on each machine of the cluster so
+that outside world can access the service
+Note: port must be in a specified range (32000 - 32767 by default)
+
+Example:
+
+```yaml
+# service.yaml - exactly same as above except type and ports
+..
+spec:
+  ..
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 31000 # service is accessible at port 31000 for each node of the cluster
+```
+
+Now we can create the service (same as before)
+To retrieve the IP of one of the nodes, `kubectl get no -o wide`
+We can then go to our browser to `<IP>:31000`
 
 # Summary of useful concepts
 
