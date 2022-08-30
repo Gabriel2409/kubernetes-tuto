@@ -147,10 +147,9 @@ Note: In this example, install is done on VM:
 Very light kubernetes distribution. Same as above, installed on a VM
 
 - lauch: `multipass launch --name k3s-1`
-- get ip: `IP=$(multipass info k3s-1 | grep IP | awk '{print $2}')` (not that IP will change if you restart host machine)
+- get ip: `IP=$(multipass info k3s-1 | grep IP | sed "s/\r//" | awk '{print $2}')` (not that IP will change if you restart host machine)
 - install : `multipass exec k3s-1 -- bash -c "curl -sfL https://get.k3s.io | sh -"`
-- create temp cfg in local machine : `multipass exec k3s-1 sudo cat /etc/rancher/k3s/k3s.yaml > k3s.cfg.tmp`
-- replace IP in config file: `cat k3s.cfg.tmp | sed "s/127.0.0.1/$IP/" > k3s.cfg`
+- create config with correct IP: `multipass exec k3s-1 sudo cat /etc/rancher/k3s/k3s.yaml | sed "s/127.0.0.1/$IP/" > k3s.cfg`
 - set kubeconfig var: `export KUBECONFIG=$PWD/k3s.cfg`
 - get nodes: `kubectl get nodes` (notes: see multipass notes on wsl)
 
@@ -506,8 +505,55 @@ spec:
 ```
 
 Now we can create the service (same as before)
-To retrieve the IP of one of the nodes, `kubectl get no -o wide`
+To retrieve the external IP of one of the nodes, `kubectl get no -o wide`
 We can then go to our browser to `<IP>:31000`
+
+NOTE: with multipass, if external IP is not visible, IP can be retrieved with a `multipass list`
+
+## LoadBalancer
+
+Same as NodePort but allows to create a LoadBalancer which will be the entrypoint to
+access the infrastructure. Instead of accessing directly the port of a given machine,
+the traffic accesses the load balancer which is outside of the custer and will redirect
+the request to one of the machines of the cluster.
+
+```yaml
+# service.yaml - exactly same as above except type and ports
+..
+spec:
+  ..
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
+      # nodePort: 31000 # if not specified, will be set by k8s
+```
+
+Usually we use LoadBalancer with a cloud provider.
+If I create a load balancer service, it will expose an external IP. Then I can go to port
+80 of this IP and it will redirect to one of the machine of the cluster in the port
+specified by nodePort
+
+## Useful cmds
+
+- launch from a speficiation file: `kubectl apply -f <service-spec.yaml>`
+
+- create pod and expose it:
+
+```bash
+# create pod
+kubectl run whoami --image containous/whoami
+# Expose NodePort Service
+kubectl expose pod whoami --type=NodePort --port=8080 --target-port=80
+# service will have the same selector as pod
+```
+
+- create service directly: `kubectl create service nodeport whoami --tcp 8080:80` (selector will be app:whoami here)
+
+- create pod and service which exposes it at once:
+  `kubectl run db --image=mongo:4.2 --port=27017 --expose`
+
+- same as pods, use `--dry-run=client -o yaml` to generate spec
 
 # Summary of useful concepts
 
