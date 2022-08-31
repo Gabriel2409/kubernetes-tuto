@@ -682,6 +682,53 @@ NOTE: we will have an error if the deployment does not exist
     - install it if necessary: `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`
     - note that for minikube, you must do `minikube addons enable metrics-server` instead
 
+# Namespaces
+
+- Namespaces are scopes for pods, services, deployments,...
+- allows to share a cluster (for ex team, project, client, ...)
+- 3 namespaces by default: default, kube-public and kube-system
+- resources are created in default if non specified
+- see namespaces: `kubectl get namespace`
+- create namespace directly: `kubectl create namespace <name>`
+- create namespace from spec: `kubectl create -f <namespacename.yaml>`
+- delete namespace: `kubectl delete namespace <name>`
+
+example spec:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: development
+  labels:
+    name: development
+```
+
+- to put a pod in a namespace:
+
+  - method 1: in the specification:
+
+  ```yaml
+  ..
+  metadata:
+    ..
+    namespace: <namespace_name>
+  ```
+
+  - method 2: `kubectl run <pod_name> --namespace <namespace_name> --image <image_name>`
+
+Now, when we list the pods, to see it: `kubectl get po --namespace=<namespace_name>` or `kubectl get-po --all-namespaces`
+If namespace is not specified, default is used
+
+Note that we can specify namespaces for other resources such as deployments.
+
+Trick with context:
+
+- To get the current client context: `kubectl config current-context`
+- to modify the default namespace in current context: `kubectl config set-context $(kubectl config current-context) --namespace=development`
+- check changes: `kubectl config view`
+  Now if we create a new resource without specifying the namespace, it will go to the namespace development
+
 # Summary of useful concepts
 
 - Container:
