@@ -259,7 +259,7 @@ spec:
 ```
 
 - launch a pod from a file: `kubectl apply -f <pod-specification.yaml>`
-- launch a pod directly from an image: `kubect run <pod-name> --image=<image-name>`
+- launch a pod directly from an image: `kubect run <pod-name> --image <image-name>`
 - list pods: `kubectl get pods`
 - describe a pod: `kubectl describe pod <pod_name>`
 - logs of a pod: `kubectl logs <pod-name> [-c <container-name>]` (no need to specify container-name if pod has only one container)
@@ -282,7 +282,7 @@ Note: generate a pod specification: `kubectl run db --image mongo:4.0 --dry-run=
 Example:
 
 ```
-kubect run www --image=nginx:1.16-alpine --restart=Never
+kubect run www --image nginx:1.16-alpine --restart=Never
 kubectl describe pod www
 # the output shows that the default scheduler assigned default/www to a node
 ```
@@ -444,6 +444,9 @@ spec:
 
 allows to have interaction inside the cluster
 
+A pod inside a node can interact with the service and the service will forward
+to relevant pods inside the cluster (even if not on same node)
+
 ```yaml
 # pod.yaml - pod specification file
 apiVersion: v1
@@ -476,7 +479,7 @@ spec:
 - creation of the pod: `kubectl apply -f pod.yaml`
 - creation of the service: `kubectl apply -f service.yaml`
 - see pods and service: `kubectl get po,svc`
-- launch interactive shell and curl to port 80: `kubectl run -it --image:alpine` and in shell: `wget -O- http://www`
+- launch interactive shell and curl to port 80: `kubectl run -it --image alpine` and in shell: `wget -O- http://www`
 
 If we want to TEMPORARILY expose a port to host machine (outside the cluster):
 
@@ -551,9 +554,53 @@ kubectl expose pod whoami --type=NodePort --port=8080 --target-port=80
 - create service directly: `kubectl create service nodeport whoami --tcp 8080:80` (selector will be app:whoami here)
 
 - create pod and service which exposes it at once:
-  `kubectl run db --image=mongo:4.2 --port=27017 --expose`
+  `kubectl run db --image mongo:4.2 --port=27017 --expose`
 
 - same as pods, use `--dry-run=client -o yaml` to generate spec
+
+# Deployment
+
+A deployment is a more high level resource that deals with an ensemble of identical pods
+and makes sure that there is a specific number of nodes that run in the cluster
+If one of the replicas crash, the deployment can restart one.
+A deployment deals with pod lifecycle:
+
+- creation / deletion
+- scaling
+- rollout / rollback
+
+ReplicaSet = An intermediate resource between deployment and pod whose role is to make
+sure pod is working as intended and takes corrective measures if needed
+Note that we rarely manipulate ReplicaSet directly
+
+example:
+
+```yaml
+# deployment
+
+apiVersion: apps/v1 # version is apps/v1 and not just v1
+kind: Deployment
+metadata:
+  name: www
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: www # selector must match pod label
+
+  template: # contains the pod specification
+    metadata:
+      labels:
+        app: www
+    spec:
+      containers:
+        - name: www
+          image: nginx:1.16
+```
+
+- run from spec: `kubectl apply -f <deploy-spec.yaml>`
+- imperative cmd: `kubectl create deploy <name> --image <image>`
+  Note: `--dry-run=client -o yaml` to have specification as usual
 
 # Summary of useful concepts
 
