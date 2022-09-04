@@ -722,6 +722,48 @@ If namespace is not specified, default is used
 
 Note that we can specify namespaces for other resources such as deployments.
 
+- quotas: `kubectl apply -f <quota.yaml> --namespace <namespacename>`
+- get the resource quotas: `kubectl get resourcequota`
+
+```yaml
+#quota.yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota
+spec:
+  hard:
+    requests.cpu: "1" #cannot ask for more than 1 cpu
+    requests.memory: 1Gi
+    limits.cpu: "2" #cannot use more than 2 cpu
+    limits.memory: 2Gi
+```
+
+- limitRange: `kubectl apply -f <limitrange.yaml> --namespace <namespacename>`
+
+```yaml
+#limitrange.yaml
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: memory-limit-range
+spec:
+  limits:
+    - default:
+        memory: 128M
+      defaultRequest:
+        memory: 64M
+      max:
+        memory: 256M
+      type: Container
+```
+
+- Now when creating a pod,
+  - if resource and requests are not specified, they will use the limitRange default
+  - if specified and correct, will use, will use the ones specified
+  - if specified but outside limitRange, will throw error
+
 Trick with context:
 
 - To get the current client context: `kubectl config current-context`
