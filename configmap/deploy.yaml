@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: www
+spec:
+  selector:
+    matchLabels:
+      app: www
+  template:
+    metadata:
+      labels:
+        app: www
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.14-alpine
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/nginx/"
+      volumes:
+        - name: config
+          configMap:
+            name: www-config

@@ -186,7 +186,7 @@ on local maching. Docker desktop must be running on WSL
 - creates a cluster named k3s with 2 workers and 1 server: `k3d cluster create k3s --agents 2`
 - more infos: `k3d cluster create --help`
 - list containers: `docker ps`: we should see servers and workers
-- swith context: `kubectl config use-context k3d-k3s`
+- switch context: `kubectl config use-context k3d-k3s`
 - list nodes: `kubectl get nodes`
 - delete cluster: `k3d cluster delete k3s`
 
@@ -770,6 +770,110 @@ Trick with context:
 - to modify the default namespace in current context: `kubectl config set-context $(kubectl config current-context) --namespace=development`
 - check changes: `kubectl config view`
   Now if we create a new resource without specifying the namespace, it will go to the namespace development
+
+# ConfigMap
+
+- Allows to decouple configuration from application specification
+
+- Create from file: `kubectl create configmap proxy-config --from-file=./nginx.conf`
+- in pod specification:
+
+```yaml
+spec:
+  containers:
+    - name: proxy
+      image: nginx:1.20-alpine
+      volumeMounts:
+        - name: config
+          mountPath: "/etc/nginx/"
+  volumes:
+    - name: config
+      configMap:
+        name: proxy-config
+```
+
+Here: the pod will use the config-map that was created from a file (can be seen when describing the pod)
+
+- config map can also be created from env-file or from litteral values
+
+config map can also be used directly in containers:
+
+```yaml
+# pod spec
+..
+spec:
+  containers:
+    - name: ..
+      ..
+      valueFrom:
+        configMapKeyRef:
+          name: app-config-list # name of configmap
+          key: log_level # gets env variable from configmap key
+```
+
+or if you want to load the full config
+
+```yaml
+# in the container spec
+envFrom:
+  - configMapRef:
+    name: <configmap-name>
+```
+
+- as usual, you can specify the specification and use `kubectl apply -f configmap.yaml`
+
+NOTE: if a deployment uses a configmap and the file configmap spec is changed, it will NOT
+automatically update the deployment when running `kubectl apply -f deploy.yaml`.
+https://stackoverflow.com/questions/37317003/restart-pods-when-configmap-updates-in-kubernetes
+A possibility is to add a config hash in the deployment spec:
+
+```yaml
+..
+spec:
+  ..
+  template:
+    ..
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14-alpine
+        volumeMounts:
+        - name: config
+          mountPath: "/etc/nginx/"
+        env:
+        - name: CONFIG_HASH
+          value: ${CONFIG_HASH}
+```
+
+- now when configmap is modified:
+  - `export CONFIG_HASH=$(kubectl get cm -oyaml | sha256sum | cut -d' ' -f1)`
+  - `envsubst '${CONFIG_HASH}' < deploy.yaml`
+  - then when doing `kubectly apply -f deploy.yaml`, the change will be reflected
+
+# Secrets
+
+- almost the same as config map but used for sensitive information
+
+## generic
+
+- first possibility: from file
+
+```bash
+echo -n "admin" > ./username.txt
+echo -n "password" > ./password.txt
+kubectl create secret generic service-creds --from-file=./username.txt --from-file=./password.txt
+```
+
+- directly:`kubectl create secret generic service-creds --from-literal=mysecret=1234`
+- list them with `kubectl get secrets`
+
+- as usual, possible to specify a yaml instead (see output of dry-run)
+
+Secret can then be used in pods similarly to config map (the key name change, for ex `secretKeyRef`)
+
+## docker-registry
+
+## tls
 
 # Summary of useful concepts
 
