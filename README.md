@@ -1,3 +1,33 @@
+# kubectl tricks
+
+## Basics
+
+- install autocompletion for kubectl: `sudo apt install bash-completion` and `source <(kubectl completion bash)`
+
+- Two approaches:
+
+  - imperative approach: handle resources in cli:
+    - create pod: `kubectl run <podname> --image <imagename> OPTIONS`
+    - create any resource: `kubectl create <resourcetype> <resourcename> OPTIONS`
+    - list resource: `kubectl get <resource>`
+    - delete resource: `kubectl delete <resource>`
+  - declarative: use a spec:
+    - create resources: `kubectl apply -f <specification-file-or-folder>`
+    - delete resources: `kubectl delete -f <specification-file-or-folder>`
+
+- Possibility to add flag `--dry-run=client` or `--dry-run=server` to prevent creation of resource (if server is specified, request is passed to server API)
+- See output with `-o yaml`, `-o json`, or `-o jsonpath` (can be used with `dry-run` to see resulting spec)
+
+- describe a resource: `kubectl describe <resourcetype> <resourcename>`
+- see all api resources and their abbreviation: `kubectl api-resources`
+- infos about commands: `kubectl explain <resourcename>` (can be nested, for ex `kubectl explain pod.metadata.uid`)
+
+## Cool tricks
+
+- get image of pod www: `kubectl get po/www -o jsonpath='{.spec.containers[0].image}'`
+- get image id of all pods in kube-system namespace: `kubectl get po -n kube-system -o jsonpath='{range.items[*]}{.status.containerStatuses[0].imageID}{"\n"}{end}'`
+- custom columns: `kubectl get po -o custom-columns='NAME:metadata.name,IMAGES:spec.containers[*].image'`
+
 # Installation
 
 ## kubectl
@@ -46,6 +76,14 @@ To install them with Krew:
 kubectl krew install ctx
 kubectl krew install ns
 ```
+
+- switch context:
+- kubectl: `kubectl config use-context <context-name>`
+- plugin: `kubectl ctx <context-name>` (replace cmd with `kubectx` if not installed with Krew)
+
+- switch namespace:
+  - kubectl: `kubectl config set-context $(kubectl config current-context) --namespace=<name>`
+  - plugin: `kubectl ns <name>` (replace cmd with `kubens` if not installed with Krew)
 
 ## multipass
 
@@ -479,7 +517,7 @@ spec:
 - creation of the pod: `kubectl apply -f pod.yaml`
 - creation of the service: `kubectl apply -f service.yaml`
 - see pods and service: `kubectl get po,svc`
-- launch interactive shell and curl to port 80: `kubectl run -it --image alpine` and in shell: `wget -O- http://www`
+- launch interactive shell and curl to port 80: `kubectl run debug -it --image alpine` and in shell: `wget -O- http://www`
 
 If we want to TEMPORARILY expose a port to host machine (outside the cluster):
 
@@ -914,7 +952,90 @@ spec:
           key: mongo_url
 ```
 
-# RBAC: TODO
+# RBAC (Role Based Access Control)
+
+## Authentication
+
+To authenticate a user, you must use several methods outside of kubernetes and then
+approve them inside the cluster, for ex:
+
+- client-certificate: `--client-ca-file=FILE`
+- bearer tokens: `--token-auth-file=FILE`
+- HTTP basic auth: `--basic-auth-file=FILE`
+
+To authenticate a process inside the cluster, we use a ServiceAccount:
+
+- gives rights to containers in a pod
+- possibility to generate a JWT token (see section on Web interface)
+- by default, pods use the ServiceAccount called default
+
+## Authorization
+
+- Being authenticated is not enough to be granted permissions.
+- Each ServiceAccount/User must then be linked to a Role via a RoleBinding or a ClusterRole via a ClusterRoleBinding
+- RoleBindings are limited to one namespace, ClusterRoleBindings apply to the whole custer
+- Roles and ClusterRoles grant access to resources with high granularity.
+  - For ex a ServiceAccount can be authorized to list pods but not delete them
+
+Note :To see which clusterroles a user / service account has access to, you can list all the
+clusterrolebindings and search for the name associated to the user / service account: `kubectl get customrolebindings -o yaml | less -p 'name: <name>'`
+I did not find a better way
+
+## Example
+
+- Create a token associated to sa default: `kubectl create token default` (visualise it at https://jwt.io,)
+- To retrieve the token, we must access it from a pod that uses this service account (see below)
+- Run a debug container: `kubectl run debug -it --image alpine`
+- Inside the container:
+
+  - install curl `apk add --update curl`
+  - try to access kubernetes server API: `curl https://kubernetes/api/v1 --insecure` => we get an error
+  - retrieve TOKEN here: `TOKEN=$(cat /run/secrets/kubernetes.io/serviceaccount/token)`
+  - try again: `curl -H "Authorization: Bearer $TOKEN" https://kubernetes/api/v1/ --insecure` => it works
+  - try to access the list of pods: `curl -H "Authorization: Bearer $TOKEN" https://kubernetes/api/v1/namespaces/default/pods/ --insecure` => forbidden, we don't have enough permissions
+
+- Create a new service account, a new role and a new role binding
+
+```yaml
+# demo-sa.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-sa
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: list-pods
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - list
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: list-pods_demo-sa
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: list-pods
+subjects:
+  - kind: ServiceAccount
+    name: demo-sa
+    namespace: default
+```
+
+- run a basic alpine pod (specify serviceAccountName: demo-sa in spec) and do the
+  same steps as above. Listing pods is now possible
 
 # Web interface
 
@@ -961,6 +1082,9 @@ type: kubernetes.io/service-account-token
 ```
 
 and we get the token with: `echo $(kubectl -n kube-system get secret admin-user -o jsonpath='{.data.token}' | base64 --decode)`
+
+- Note: instead of creating the secret (which creates a non expiring token), we can also do: `kubectl -n kube-system create token admin-user`
+  and retrieve the token. If we use this method without binding the token to a secret, see prev section to retrieve the token
 
 # Summary of useful concepts
 
