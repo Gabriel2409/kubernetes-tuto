@@ -1037,6 +1037,82 @@ subjects:
 - run a basic alpine pod (specify serviceAccountName: demo-sa in spec) and do the
   same steps as above. Listing pods is now possible
 
+## Example with azure
+
+Dealing with authentication of users can be difficult. It is possible to use azure active
+directory to help with authentication.
+See following resources:
+https://docs.microsoft.com/fr-fr/azure/aks/azure-ad-rbac
+https://docs.microsoft.com/fr-fr/azure/aks/managed-aad
+
+- Install azure cli and azure kubelogin: `sudo az aks install-cli`
+- create an admin group that will be in charge of the cluster:
+
+  - cli :`az ad group create --display-name myAKSAdminGroup --mail-nickname myAKSAdminGroup`
+  - OR web: go to groups and click new groups
+  - then add users in the group
+
+- create another group that will be bound to a kubernetes role (for ex named appdev) and add users
+- create a new resource group:
+
+  - cli: `az group create --name myResourceGroup --location francecentral`
+  - OR web: go to resource groups and click Create
+
+- crate a kubernetes cluster:
+
+  - cli: `az aks create -g myResourceGroup -n myManagedCluster --enable-aad --aad-admin-group-object-ids <myAKSAdminGroupid> [--aad-tenant-id <id>]`
+  - OR web : click on Kubernetes Services and click create then Create a Kubernetes cluster.
+    Be sure to select Azure AD authentication with Kubernetes RBAC in Access and select the myAKSAdminGroup as admin cluster
+
+- Add the appdev group as an Azure Kubernetes Service Cluster User Role:
+  - cli: `az role assignment create --assignee <appdevid> --role "Azure Kubernetes Service Cluster User Role" --scope <myManagedClusterid>`
+  - OR Web: in access control (IAM), create a new role and add the appdev group in this role.
+
+Now to connect locally:
+
+- log as cluster admin: `az login`
+- get creds: `az aks get-credentials --resource-group myResourceGroup --name myManagedCluster`
+- then try a `kubectl get po`: it will work
+- add a role and a rolebinding for appdev, for ex:
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dev-user-full-access
+  namespace: dev
+rules:
+  - apiGroups: ["", "extensions", "apps"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["*"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dev-user-access
+  namespace: dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dev-user-full-access
+subjects:
+  - kind: Group
+    namespace: dev
+    name: <appdevid> # replace with id of appdev group
+```
+
+then kubectl apply -f
+
+- Now when a user of appdev will try to access the kubernetes cluster,
+  - login: `az login`
+  - get the creds: `az aks get-credentials --resource-group myResourceGroup --name myManagedCluster`
+  - `kubectl get po` (error) or `kubectl get po -n dev` (works)
+
 # Web interface
 
 If on minikube:
