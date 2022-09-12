@@ -1192,6 +1192,53 @@ Weavescope is an app used to see the processes, containers and all running in th
 - port forward the corresponding pod: `kubectl port forward -n weave pod/weave-scope-app-6996cfd49b-48zz4 4040`
 - app is available at `localhost:4040`
 
+# Jobs and Cronjobs
+
+- jobs allow to execute a task on the cluster and crojobs allow to schedule them.
+- to write a cronjob, you basically write a schedule and a jobtemplate
+
+- example job:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dump
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        app: dump # pod will be scheduled on node with given label
+      containers:
+        - name: mongo
+          image: mongo:4.0
+          command:
+            - /bin/bash
+            - -c
+            - mongodump --gzip --host db --archive=/dump/db.gz
+          volumeMounts:
+            - name: dump
+              mountPath: /dump
+      volumes:
+        - name: dump
+          hostPath:
+            path: /dump
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dump
+spec:
+  schedule: "* * * * *" #
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          # everything in job spec.template.spec
+```
+
 # Summary of useful concepts
 
 - Container:
