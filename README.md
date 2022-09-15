@@ -1264,7 +1264,8 @@ spec:
 ```
 
 Then when i go to example.com I am redirected to www service (provided dns resolution
-points to correct ip)
+points to correct ip). If testing in local machine, you must modify /etc/hosts
+(C:\Windows\System32\drivers\etc\hosts on windows)
 
 # Stateful Workload
 
@@ -1378,6 +1379,40 @@ the pod scheduling.
 
 Note: Usually, we use a PVC and a storageClass but we don't create the PV ourselves.
 Instead, we specify a provisioner in the storageClass (azure, aws, etc)
+
+## StatefulSet
+
+- used for stateful applications
+- manages pods in a NON interchangeable way
+- each pod has a constant name, a persistent network id, its own storage
+- Example with a mysql cluster:
+  - one master pod (for writing)
+  - slaves pods (for reading)
+
+# Helm
+
+Install helm: https://github.com/helm/helm/releases
+then add stable repo: `helm repo add stable https://charts.helm.sh/stable`
+
+- main hub: https://artifacthub.io. When clicking on a given package, i have the instructions
+  to install it with helm, for ex
+  `helm repo add nginx-stable https://helm.nginx.com/stable` and `helm install nginx-ingress nginx-stable/nginx-ingress`
+
+NOTE: to install on azure, they suggest:
+`helm install ingress-nginx ingress-nginx/ingress-nginx --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path"=/healthz`
+which adds some annotations. It seems it does not work without it for some reason
+
+- list all installed helm packages: `helm list`
+- get spec: `helm get manifest nginx-ingress`
+- delete : `helm delete nginx-ingress`
+
+Note: you can use kubectl to see the installed resources
+
+- Helm allows for templating:
+  - create new project: `helm create tick_chart`
+  - in values.yaml, put your values
+  - in the templates folder, you can use templating: `{{ .Values.<key>.<field> }}`
+  - install app: `helm install tick <path/to/helm/dir>`
 
 # Summary of useful concepts
 
