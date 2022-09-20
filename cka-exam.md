@@ -93,3 +93,37 @@ If we setup the cluster using kubeadm, kubeadm deploys the kube-apiserver-master
 All of the controllers are packaged in a single process: the `kube-controller-manager`
 
 If we setup the cluster using kubeadm, kubeadm deploys the kube-controller-manager-master as a pod in the kube-system namespace
+
+## Scheduler
+
+- Decides which pod goes on which node
+- First phase: the scheduler filters out the nodes that do not fit the profile of the pod
+  - for ex nodes that don't have enough resources
+- Second phase: rank the nodes
+  - the scheduler uses a priority function to assign a score to the nodes
+
+If we setup the cluster using kubeadm, kubeadm deploys the kube-scheduler as a pod in the kube-system namespace
+Options are visible in /etc/kubernetes/manifests/kube-scheduler.yaml
+
+## Kubelet
+
+- sole point of contact between worker nodes and api-server
+- registers the node with the k8s cluster
+- When instructed, request the Container Runtime Engine to pull the required image and run an instance
+- Monitors the state of the pods and the containers and gives report on a timely basis
+
+NOTE: kubeadm does not automatically deploy kubelets. You must always manually download the kubelet on your worker node
+
+## Kube proxy
+
+Withing a k8s cluster, any pod can reach another pod. This is accomplished by deploying networking solution accros the cluster
+A pod network is an internal virtual network that span accross all the nodes and all the pods are connected to it
+Note that there is no guarantee that the ip of a pod will remain the same, which is why we use services that forward traffic to correct pods
+
+However, the service is just a virtual component that only lives in k8s memory. Which is why we need kube-proxy
+
+kube-proxy runs on each node in the k8s cluster.
+Each time a service is created, it creates the appropriate rules on each node to forward traffic to those services
+To do that it creates ip tables to forward the ip of the service to the ip of the actual pod it needs to reach
+
+kube-adm deploys kube-proxy as pods on each node as a DaemonSet (a single pod on each node)
