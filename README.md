@@ -12,6 +12,7 @@
     - list resource: `kubectl get <resource>`
     - delete resource: `kubectl delete <resource-type> <resource>`
     - edit configuration of resource on the fly: `kubectl edit <resource-type> <resource>`
+    - patch specific fields: `kubectl patch <resource-type> <resource> -p '{"<key>": {"<subkey>": <value>}}'`
   - declarative: use a spec:
     - create resources: `kubectl apply -f <specification-file-or-folder>`
     - delete resources: `kubectl delete -f <specification-file-or-folder>`
