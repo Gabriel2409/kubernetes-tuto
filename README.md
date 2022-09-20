@@ -10,7 +10,8 @@
     - create pod: `kubectl run <podname> --image <imagename> OPTIONS`
     - create any resource: `kubectl create <resourcetype> <resourcename> OPTIONS`
     - list resource: `kubectl get <resource>`
-    - delete resource: `kubectl delete <resource>`
+    - delete resource: `kubectl delete <resource-type> <resource>`
+    - edit configuration of resource on the fly: `kubectl edit <resource-type> <resource>`
   - declarative: use a spec:
     - create resources: `kubectl apply -f <specification-file-or-folder>`
     - delete resources: `kubectl delete -f <specification-file-or-folder>`
