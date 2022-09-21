@@ -330,17 +330,90 @@ kubectl describe pod www
 Here the scheduler was able to select a node in our cluster. It is also possible to
 add constraints to help the scheduler select a node
 
+### Assigning pods to node without a scheduler
+
+If we deploy our own cluster without the kube-scheduler, the pod will remain in a pending
+state. To assign the pod to a node, there are two possibilities:
+
+1.add a nodeName property in the spec of the pod:
+
+```yaml
+..
+spec:
+  nodeName: <mynode>
+```
+
+However, this can only be done before pod creating.
+
+2. Assign it yourself
+   To assign a pending pod to a node, we must use a binding object:
+
+```yaml
+apiVersion: v1
+kind: Binding
+metadata:
+  name: <binding-name>
+target:
+  apiVersion: v1
+  kind: Node
+  name: <node-name>
+```
+
+then do a post request to the binding api: `curl --header "Content-Type:application/json --request POST --data '{<json>}' http://$SERVER/api/v1/namespaces/default/pods/<pod-name>/binding`
+where <json> represents the binding object in a json format.
+This effectively mimicks what the kube-scheduler does for us.
+
+### taints and toleration
+
+A taint is added on a node and is repulsive. For a pod to be scheduled on this node,
+it must tolerate this taint
+
+```
+# example: on a master node, there is a taint to prevent scheduling
+$ kubectl get no master -o yaml
+...
+spec:
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+```
+
+Now if I want to deploy a pod on this node, in the pod specification file, i put the
+same key and same effect as the taint.
+
+To manually add a taint to a node: `kubectl taint nodes <node-name> <key>=<value>:<taint-effect>`
+To remove a taint, same command but add a `-` after the effect
+Note: <key> and <value> can be anything but <taint-effect> is either:
+
+- NoSchedule: pods who don't have the toleration will not be scheduled
+- PreferNoSchedule: pods can still be scheduled here but only if necessary
+- NoExecute: pods that are already on the node but that don't have the toleration will be killed
+
+For a pod to be able to be scheduled on node above, it must have the following toleration (note the quotes):
+
+```yaml
+..
+spec:
+  tolerations:
+    - effect: "<taint-effec>"
+      key: "<key>"
+      operator: "Equal"
+      value: "<value>"
+```
+
+Note: even if a pod has a toleration to a taint, it doesn't guarantee a schedule on said node with the taint.
+Taint and tolerations are only a repulsive strategy
+
 ### nodeSelector: schedule a pod on a node with a specific label
 
 ```bash
 # add label on a node
 kubectl label nodes <node-name> disktype=ssd
-# see node as yaml
-kubectl get node/<node-name> -o yaml
-# shows the labels in the outputs
+# see node with specific selector
+kubectl get no --selector <key>=<value>
 ```
 
-- then in the file specification:
+- then in the file specification of the pod:
 
 ```yaml
 
@@ -389,6 +462,8 @@ spec:
               values:
                 - ssd
 ```
+
+Note: the spec is hard to remember but you can run `kubectl explain po.spec.affinity.nodeAffinity --recursive=true` to retrieve the structure
 
 ### podAffinity / podAntiAffinity
 
@@ -440,32 +515,6 @@ spec:
         limits:
           memory: "128Mi"
           cpu: "500m"
-```
-
-### taints and toleration
-
-A taint is added on a node and is repulsive. For a pod to be scheduled on this node,
-it must tolerate this taint
-
-```
-# example: on a master node, there is a taint to prevent scheduling
-$ kubectl get no master -o yaml
-...
-spec:
-  taints:
-    - effect: NoSchedule
-      key: node-role.kubernetes.io/master
-```
-
-Now if I want to deploy a pod on this node, in the pod specification file, i put the
-same key and same effect as the taint.
-
-```yaml
-..
-spec:
-  tolerations:
-    - effect: NoSchedule
-      key: node-role.kubernetes.io/master
 ```
 
 # Services
@@ -803,13 +852,6 @@ spec:
   - if resource and requests are not specified, they will use the limitRange default
   - if specified and correct, will use, will use the ones specified
   - if specified but outside limitRange, will throw error
-
-Trick with context:
-
-- To get the current client context: `kubectl config current-context`
-- to modify the default namespace in current context: `kubectl config set-context $(kubectl config current-context) --namespace=development`
-- check changes: `kubectl config view`
-  Now if we create a new resource without specifying the namespace, it will go to the namespace development
 
 # ConfigMap
 
