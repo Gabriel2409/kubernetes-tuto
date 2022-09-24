@@ -1041,20 +1041,10 @@ spec:
 
 ## generic
 
-- first possibility: from file
+- `kubectl create secret generic my-secret` followed by `--from-file=myfile`, `--from-env-file=myfile`, `--from-literal=key=val`
+  -> output will look the same as in configmap but values are stored in base64
 
-```bash
-echo -n "admin" > ./username.txt
-echo -n "password" > ./password.txt
-kubectl create secret generic service-creds --from-file=./username.txt --from-file=./password.txt
-```
-
-- directly:`kubectl create secret generic service-creds --from-literal=mysecret=1234`
-- list them with `kubectl get secrets`
-
-- as usual, possible to specify a yaml instead (see output of dry-run)
-
-Secret can then be used in pods similarly to config map (the key name change, for ex `secretKeyRef`)
+Secret can then be used in pods similarly to config map (the key name change, for ex `secretKeyRef` instead of `configMapKeyRef` and `secretRef` instead of configMapRef)
 
 ## docker-registry
 
@@ -1098,6 +1088,34 @@ spec:
           name: mongo
           key: mongo_url
 ```
+
+# initContainers
+
+An initContainer is configured in a pod like all other containers, except that it is specified inside a initContainers section:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+spec:
+  containers:
+    - name: myapp-container
+      image: busybox:1.28
+      command: ["sh", "-c", "echo The app is running! && sleep 3600"]
+  initContainers:
+    - name: init-myservice
+      image: busybox
+      command:
+        [
+          "sh",
+          "-c",
+          "git clone <some-repository-that-will-be-used-by-application> ; done;",
+        ]
+```
+
+When a POD is first created the initContainer is run, and the process in the initContainer
+must run to a completion before the real container hosting the application starts.
 
 # RBAC (Role Based Access Control)
 
