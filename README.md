@@ -517,6 +517,76 @@ spec:
           cpu: "500m"
 ```
 
+## Static pods
+
+If the node containing kubelet is on its own (not part of a k8s cluster),
+it can still create static pods. Note that because there is no api-server in this case,
+you must specify the pod-manifest path containing the yaml files when creating the kubelet service.
+Once the pods have been created, you can see them with `docker ps` (there is no kubectl)
+
+Now how does it work in the cluster? In fact kubelet can create pods from different sources:
+
+- through the pod definition file
+- through an http api endpoint: the kube-api server provides input to kubelet
+
+Note that even if kubelet creates a static pod, it creates a mirror object in the api-server.
+You can view details of the pods with kubectl but can not delete or edit it like usual pods.
+Note that the node name is automatically appended to the name of the pod
+
+Usecase: to create a cluster from scratch,
+
+- install kubelet on all the master nodes
+- create a pod definition file for all the control plane components (kube-apiserver, controller-manager, etcd,... )
+- place these files in the designated manifest folder
+
+That way if these services crash, kubelet starts them again !
+That is how kubeadm does it. That's why when listing the pods, you can see the different
+control plane components in the kubeadm tool
+
+Check what controls the pod with `kubectl describe po -n kube-system | grep "Controlled By"`
+If it starts with Node/... then it is a static pod
+
+Note: to check kubelet config for a given node, do `kubectl proxy` and then go to
+`http://localhost:8001/api/v1/nodes/<node-name>/proxy/configz`
+ALternatively, look at /var/lib/kubelet/config.yaml
+
+## Multiple schedulers
+
+Kubernetes is extensible. It is possible to use custom schedulers instead of the standard
+kube-scheduler.
+It is also possible to use multiple schedulers. For example, we can have one application
+that uses a specific scheduler while the others use the standard kube-scheduler
+
+Now to configure another scheduler, we can create a new yaml file in the manifests folder and
+use the property of kubelet that will deploy it as a static pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-custom-scheduler
+  namespace: kube-system
+spec:
+  containers:
+    - image: k8s.gcr.io/kube-scheduler-amd64:v1.11.3
+      name: custom-kube-scheduler
+      command:
+        - kube-scheduler
+        - --address 127.0.0.1
+        - --kubeconfig=/etc/kubernetes/scheduler.conf
+        - --leader-elect=true # important in case of multiple schedulers
+        - --scheduler-name=my-custom-scheduler
+        - --lock-object-name=my-custom-scheduler # important when voting
+```
+
+Now in a pod yaml file:
+
+```yaml
+---
+spec:
+  schedulerName: my-custom-scheduler
+```
+
 # Services
 
 - expose pods via network rules
@@ -857,28 +927,61 @@ spec:
 
 - Allows to decouple configuration from application specification
 
-- Create from file: `kubectl create configmap proxy-config --from-file=./nginx.conf`
-- in pod specification:
+- create from literal: `kubectl create cm my-config --from-literal=mykey=myval --from-literal=mykey2=myval2`
+  Or from env file: `kubectl create cm my-config --from-env-file=myenvfile`
+
+```
+# myenvfile
+mykey=myval
+mykey2=myval
+```
+
+The output is the same:
 
 ```yaml
+# output config map
+apiVersion: v1
+data:
+  mykey: myval
+  mykey2: myval2
+kind: ConfigMap
+metadata:
+  name: my-config
+```
+
+- If we use `--from-file` instead of `from-env-file`, we get
+
+```
+..
+data:
+  <file-name>: |
+    # full content of the file
+```
+
+In conclusion, while --from-literal and --from-env-file allow to store data as key value
+pairs, --from-file uses the name of the file as the key and the full content as the value
+
+To use the config in a pod, there are several possibilities:
+
+- mounted as volume. Each of the keys of the cm will be create as a file in the specified
+  place and the content will be the value associated to it. The config is mounted as read
+  only so it can not be modified from within the pod
+
+```yaml
+# pod spec
 spec:
   containers:
-    - name: proxy
-      image: nginx:1.20-alpine
+    - ..
       volumeMounts:
         - name: config
-          mountPath: "/etc/nginx/"
+          mountPath: "/path/to/config"
   volumes:
     - name: config
       configMap:
-        name: proxy-config
+        name: <config-map-name>
 ```
 
-Here: the pod will use the config-map that was created from a file (can be seen when describing the pod)
-
-- config map can also be created from env-file or from litteral values
-
-config map can also be used directly in containers:
+- used as env variable inside the container
 
 ```yaml
 # pod spec
@@ -887,10 +990,12 @@ spec:
   containers:
     - name: ..
       ..
-      valueFrom:
-        configMapKeyRef:
-          name: app-config-list # name of configmap
-          key: log_level # gets env variable from configmap key
+      env:
+        - name: MYVAR
+          valueFrom:
+            configMapKeyRef:
+              name: app-config-list # name of configmap
+              key: log_level # gets env variable from configmap key
 ```
 
 or if you want to load the full config
@@ -901,8 +1006,6 @@ envFrom:
   - configMapRef:
     name: <configmap-name>
 ```
-
-- as usual, you can specify the specification and use `kubectl apply -f configmap.yaml`
 
 NOTE: if a deployment uses a configmap and the file configmap spec is changed, it will NOT
 automatically update the deployment when running `kubectl apply -f deploy.yaml`.
