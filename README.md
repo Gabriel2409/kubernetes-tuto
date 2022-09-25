@@ -1512,6 +1512,27 @@ Note: when doing `kubectl get no -o wide`, the version we see is the version of 
 
 ## Backup and restore
 
+Best strat is to use the declarative approach and save yaml definition files to source control
+However, some resources can be declared using the imperative approach so we could use : `kubectl get all -A -o yaml > all-deploy-services.yaml`
+
+Another approach is to backup the etcd server itself.
+When configuring etcd, the --data-dir option specifies where all the data is stored. That is the directory we want to backup.
+We can also use the etcdctl tool:
+
+```bash
+# first, we specify the api version:
+export ETCDCTL_API=3
+# Then we need to get the credentials of etcd. If it runs in a pod, we can look for
+# the configuration. We must have the files on the machine where etcdctl runs
+# then we save the snapshot
+etcdctl snapshot save --endpoints=<controlpane-ip> --cert=<server.crt> --cacert=<ca.crt> --key=<server.key> /path/to/snapshot.db
+# then we create the restore
+etcdctl snapshot restore /path/to/snapshot.db --data-dir=/path/to/new-data/
+# If process was not done on controlplane node, we transfer the folder
+scp /path/to/new-data controlplane-node:/var/lib/data-new
+# Then, in the master node, we update the pod spec to point to the new data-dir
+```
+
 # Helm
 
 Install helm: https://github.com/helm/helm/releases
