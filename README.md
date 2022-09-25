@@ -1482,6 +1482,36 @@ Instead, we specify a provisioner in the storageClass (azure, aws, etc)
   - one master pod (for writing)
   - slaves pods (for reading)
 
+# Cluster maintenance
+
+## Node drain
+
+- Makes a node unschedulable and evicts the pods `kubectl drain <node-name>`
+- If there are pods that are part of a daemonset on the node, pass `--ignore-daemonsets`
+- If there are pods that are not part of a replicaset, you must pass `--force`. However, the pods in question will be forever lost
+
+- To make a node schedulable again: `kubectl uncordon <node-name>`
+
+Note: To make a pod unschedulable without evicting the existing pods: `kubectl cordon <node-name>`
+
+## Note on upgrades
+
+Compatibility of k8s elements:
+
+- if kube-apiserver is v1.X:
+  - controller manager and kube-scheduler can be 1.X-1
+  - kubelet and kube-proxy can be 1.X-2
+  - kubectl can be between 1.X-1 and 1.X+1
+
+To upgrade a cluster with kubeadm: https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+
+Note: do not forget to upgrade kubelet as well with : `apt install kubelet=1.X.x-00`
+and then restart services: `systemctl daemon-reload` and `systemctl restart kubelet`
+
+Note: when doing `kubectl get no -o wide`, the version we see is the version of kubelet
+
+## Backup and restore
+
 # Helm
 
 Install helm: https://github.com/helm/helm/releases
