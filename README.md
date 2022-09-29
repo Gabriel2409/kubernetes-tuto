@@ -592,7 +592,7 @@ spec:
 - expose pods via network rules
 - use labels to group pods
 - persistant IP address (virtual IP address)
-- kube-proxy in charge of laod balancing on pods
+- kube-proxy in charge of load balancing on pods
 - different types:
   - ClusterIP: exposition inside cluster
   - NodePort: exposition to outside
@@ -1051,6 +1051,18 @@ Secret can then be used in pods similarly to config map (the key name change, fo
 used to identify on a docker registry:
 `kubectl create secret docker-registry registry-creds --docker-server=REGISTRY --docker-username=USERNAME --docker-password=PASSWORD --docker-email=EMAIL`
 
+Then to pull a private image, in the pod spec:
+
+```yaml
+..
+spec:
+  containers:
+    - name: ..
+      image: private-registry.io/apps/internal-image # full path
+  imagePullSecrets:
+    - name: registry-creds  # secret created above
+```
+
 - when doing `kubectl get secret registry-creds -o yaml`, in the data key, we see `.dockerconfigjson` with creds encoded in b64
 
 ## tls
@@ -1242,7 +1254,7 @@ Note that if a mode fails, it is forwarded to the next so the order is important
 To check if an action is possible: `kubectl auth can-i <verb> <resource>`
 If you are an admin, check if someone else can do an action: `kubectl auth can-i <verb> <resource> --as <sa|user>`
 
-## Example ServiceAccount
+### Example RBAC with ServiceAccount
 
 - Create a token associated to sa default: `kubectl create token default` (visualise it at https://jwt.io,)
 - To retrieve the token, we must access it from a pod that uses this service account (see below)
@@ -1297,6 +1309,60 @@ subjects:
 
 - run a basic alpine pod (specify serviceAccountName: demo-sa in spec) and do the
   same steps as above. Listing pods is now possible
+
+## Security context
+
+When running a pod, it is possible to specify the security context:
+
+```yaml
+..
+## example at the pod level
+spec:
+  ..
+  securityContext:
+    runAsUser: 1000
+
+--
+## example at the container level
+spec:
+  ..
+  containers:
+    - name:
+      securityContext:
+        runAsUser: 1000
+        capabilities:
+          add: ["MAC_ADMIN"] # adds a privilege, only supported at container level
+```
+
+## Network policy
+
+By default, all pods can communicate with each other.
+We can restrict the communication by creating a network policy
+We use labels and selector to link a policy to a pod.
+
+```yaml
+# example policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+spec:
+  podSelector:
+    matchLabels:
+      role: db # select pods with the role:db label
+    policyTypes:
+      - Ingress #only ingress traffic is restricted.
+    ingress:
+      - from:
+          - podSelector:
+              matchLabels:
+                name: api-pod
+        ports:
+          - protocol: TCP
+            port: 3306
+```
+
+Note: Kube-router, Calico, Romana, Weave-net support network policy but Flannel does not
 
 # Web interface
 
@@ -1423,6 +1489,58 @@ spec:
         spec:
           # everything in job spec.template.spec
 ```
+
+# Networking
+
+## Node addresses
+
+- Get ip addresses of nodes with `kubectl get no -o wide`
+- Inside a node (after ssh),
+  - List all ip addresses with `ip addr` => identify which network the node is part of
+  - Run `ip link show <network-name>` to have infos about Mac addresses
+  - See docker networks: `docker network ls`. Inspect a network `docker inspect <id>` to get the ip
+  - see the routes and default gateway: `ip route`
+  - see the ports currently listened: `netstat -l` (add -n to have numeric addresses and -p to have process names)
+
+Note: usually, docker network ls shows the bridge network. It corresponds to docker0 on the host
+
+## Pod networking
+
+K8s does not implement the networking solution. Instead, it expects us to use a plugin that
+respects the CNI. Rules are the following:
+
+- Every Pod should have an IP address
+- Every Pod should be able to communicate with every other Pod in the same node using that IP address
+- Every Pod should be able to communicate with every other Pod on other nodes without NAT
+
+There are many networking solutions such as flannel, cilium, vmware NSX, ...
+
+Prior to 1.24, the CNI plugin was configured on the kubelet service on each node of the cluster:
+
+```
+# PRIOR TO 1.24 ONLY, removed in current version
+--network-plugin=cni
+--cni-bin-dir=/opt/cni/bin # all supported cni plugins as executables
+--cni-conf-dir=/ect/cni/net.d # where kubelet finds which plugins should be used
+```
+
+Check current kubelet config with `ps -aux | grep kubelet`
+
+After 1.24 I don't know how to easily get the plugin used. Most of the time it is in
+/etc/cni/net.d/
+
+Note: if no network plugin is install, pods will be stuck in containerCreating as no
+ip can be given to the pod. If the cluster is running, you can for example install
+weave-net with `kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"`
+
+## Service networking
+
+When a service is created, it is assigned an ip address from a predefined range.
+It can be seen in the kube-apiserver config `--service-cluster-ip-range ipNet` (default 10.0.0.0/24)
+kube-proxy is then in charge of creating forwarding rules from the service to the underlying pod
+Now when a pod tries to reach a service, it is forwarded to the underlying node that is accessible from anywhere in the cluster
+
+kube-proxy can be configured with `--proxy-mode [iptables | userspace | ipvs]` (iptables by default)
 
 # Ingress
 
